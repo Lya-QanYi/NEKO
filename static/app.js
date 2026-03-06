@@ -5252,10 +5252,18 @@ function init_app() {
                         clearTimeout(window._vrmCanvasFadeInId);
                         window._vrmCanvasFadeInId = null;
                     }
+                    if (window._vrmCanvasFadeInListener) {
+                        const prevCanvas = document.getElementById('vrm-canvas');
+                        if (prevCanvas) {
+                            prevCanvas.removeEventListener('transitionend', window._vrmCanvasFadeInListener);
+                        }
+                        window._vrmCanvasFadeInListener = null;
+                    }
 
                     // 【第一步】在容器可见之前，先将 VRM canvas opacity 设为 0（防止旧帧闪烁）
                     const vrmCanvasInner = document.getElementById('vrm-canvas');
                     if (vrmCanvasInner) {
+                        vrmCanvasInner.style.transition = 'none';
                         vrmCanvasInner.style.opacity = '0';
                     }
 
@@ -5287,13 +5295,22 @@ function init_app() {
                         vrmCanvasInner.style.opacity = '1';
 
                         // 过渡完成后清除内联样式，避免干扰后续功能
-                        window._vrmCanvasFadeInId = setTimeout(() => {
-                            if (vrmCanvasInner) {
-                                vrmCanvasInner.style.transition = '';
-                                vrmCanvasInner.style.opacity = '';
+                        const cleanupFadeIn = () => {
+                            vrmCanvasInner.removeEventListener('transitionend', window._vrmCanvasFadeInListener);
+                            window._vrmCanvasFadeInListener = null;
+                            if (window._vrmCanvasFadeInId) {
+                                clearTimeout(window._vrmCanvasFadeInId);
+                                window._vrmCanvasFadeInId = null;
                             }
-                            window._vrmCanvasFadeInId = null;
-                        }, 550);
+                            vrmCanvasInner.style.transition = '';
+                            vrmCanvasInner.style.opacity = '';
+                        };
+                        window._vrmCanvasFadeInListener = (e) => {
+                            if (e.propertyName === 'opacity') cleanupFadeIn();
+                        };
+                        vrmCanvasInner.addEventListener('transitionend', window._vrmCanvasFadeInListener);
+                        // 安全超时兜底，防止 transitionend 不触发
+                        window._vrmCanvasFadeInId = setTimeout(cleanupFadeIn, 1000);
                     }
                     console.log('[showCurrentModel] 已设置vrmContainer可见（带canvas渐入动画）');
                 }
