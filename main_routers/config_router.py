@@ -648,7 +648,7 @@ async def list_gptsovits_voices(request: Request):
         if not api_url:
             return {"success": False, "error": "TTS_GPT_SOVITS_URL_REQUIRED", "code": "TTS_GPT_SOVITS_URL_REQUIRED"}
 
-        # SSRF 防护：限制 api_url 只能是 localhost
+        # SSRF 防护: 限制 api_url 只能是 localhost
         parsed = urlparse(api_url)
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
             return {"success": False, "error": "TTS_GPT_SOVITS_URL_INVALID", "code": "TTS_GPT_SOVITS_URL_INVALID"}
