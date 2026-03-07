@@ -646,19 +646,19 @@ async def list_gptsovits_voices(request: Request):
         api_url = data.get("api_url", "").rstrip("/")
 
         if not api_url:
-            return {"success": False, "error": "api_url is required"}
+            return {"success": False, "error": "TTS_GPT_SOVITS_URL_REQUIRED", "code": "TTS_GPT_SOVITS_URL_REQUIRED"}
 
         # SSRF 防护：限制 api_url 只能是 localhost
         parsed = urlparse(api_url)
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
-            return {"success": False, "error": "Invalid api_url"}
+            return {"success": False, "error": "TTS_GPT_SOVITS_URL_INVALID", "code": "TTS_GPT_SOVITS_URL_INVALID"}
         host = parsed.hostname
         try:
             if not ipaddress.ip_address(host).is_loopback:
-                return {"success": False, "error": "api_url must be localhost"}
+                return {"success": False, "error": "TTS_CUSTOM_URL_LOCALHOST_ONLY", "code": "TTS_CUSTOM_URL_LOCALHOST_ONLY"}
         except ValueError:
             if host not in ("localhost",):
-                return {"success": False, "error": "api_url must be localhost"}
+                return {"success": False, "error": "TTS_CUSTOM_URL_LOCALHOST_ONLY", "code": "TTS_CUSTOM_URL_LOCALHOST_ONLY"}
 
         endpoint = f"{api_url}/api/v3/voices"
         async with aiohttp.ClientSession() as session:
