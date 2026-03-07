@@ -14,6 +14,7 @@ import os
 import asyncio
 import copy
 import base64
+import hashlib
 from datetime import datetime
 import pathlib
 import wave
@@ -1825,6 +1826,9 @@ async def voice_clone(file: UploadFile = File(...), prefix: str = Form(...), ref
         logger.error(f"读取文件到内存失败: {e}")
         return JSONResponse({'error': f'读取文件失败: {e}'}, status_code=500)
     
+    # 计算参考音频的 MD5，用于去重
+    audio_md5 = hashlib.md5(file_content).hexdigest()
+    
     # 检测是否使用本地 TTS（ws/wss 协议）
     _config_manager = get_config_manager()
     tts_config = _config_manager.get_model_api_config('tts_custom')
@@ -1833,6 +1837,18 @@ async def voice_clone(file: UploadFile = File(...), prefix: str = Form(...), ref
     
     if is_local_tts:
         # ==================== 本地 TTS 注册流程 ====================
+        # MD5 去重：检查是否已有相同音频注册过的音色
+        existing = _config_manager.find_voice_by_audio_md5('__LOCAL_TTS__', audio_md5)
+        if existing:
+            voice_id, voice_data = existing
+            logger.info(f"本地 TTS 音频 MD5 命中，复用 voice_id: {voice_id}")
+            return JSONResponse({
+                'voice_id': voice_id,
+                'message': '已复用现有音色，跳过上传',
+                'reused': True,
+                'is_local': True
+            })
+        
         # 将 ws(s):// 转换为 http(s):// 用于 REST API 调用
         if base_url.startswith('wss://'):
             http_base = 'https://' + base_url[6:]
@@ -1873,6 +1889,7 @@ async def voice_clone(file: UploadFile = File(...), prefix: str = Form(...), ref
                         'voice_id': voice_id,
                         'prefix': prefix,
                         'is_local': True,
+                        'audio_md5': audio_md5,
                         'created_at': datetime.now().isoformat()
                     }
                     try:
@@ -1906,6 +1923,20 @@ async def voice_clone(file: UploadFile = File(...), prefix: str = Form(...), ref
             }, status_code=500)
     
     # ==================== 阿里云 TTS 注册流程（原有逻辑） ====================
+    
+    # MD5 去重：提前获取 api_key 并检查是否有相同音频已注册
+    tts_config_for_dedup = _config_manager.get_model_api_config('tts_custom')
+    dedup_api_key = tts_config_for_dedup.get('api_key', '')
+    if dedup_api_key:
+        existing = _config_manager.find_voice_by_audio_md5(dedup_api_key, audio_md5)
+        if existing:
+            voice_id, voice_data = existing
+            logger.info(f"阿里云 TTS 音频 MD5 命中，复用 voice_id: {voice_id}")
+            return JSONResponse({
+                'voice_id': voice_id,
+                'message': '已复用现有音色，跳过上传',
+                'reused': True
+            })
     
     # 根据参考音频语言计算 language_hints
     # 对于中文 (ch)，language_hints 为空列表
@@ -2117,6 +2148,7 @@ async def voice_clone(file: UploadFile = File(...), prefix: str = Form(...), ref
                     'voice_id': voice_id,
                     'prefix': prefix,
                     'file_url': tmp_url,
+                    'audio_md5': audio_md5,
                     'created_at': datetime.now().isoformat()
                 }
                 try:

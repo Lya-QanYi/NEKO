@@ -934,6 +934,21 @@ class ConfigManager:
         voice_storage[api_key][voice_id] = voice_data
         self.save_voice_storage(voice_storage)
 
+    def find_voice_by_audio_md5(self, api_key: str, audio_md5: str):
+        """在指定 API Key 下按参考音频 MD5 查找已有音色。
+
+        返回 (voice_id, voice_data) 或 None。
+        旧条目没有 audio_md5 字段时会被自动跳过（向后兼容）。
+        """
+        if not api_key or not audio_md5:
+            return None
+        voice_storage = self.load_voice_storage()
+        voices = voice_storage.get(api_key, {})
+        for vid, vdata in voices.items():
+            if isinstance(vdata, dict) and vdata.get('audio_md5') == audio_md5:
+                return (vid, vdata)
+        return None
+
     def delete_voice_for_current_api(self, voice_id):
         """删除当前 TTS 配置下的指定音色"""
         voice_storage = self.load_voice_storage()
