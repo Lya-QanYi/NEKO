@@ -1349,6 +1349,10 @@
             "proactiveNewsChatTooltip": "トレンド話題を使用してチャット",
             "proactiveVideoChat": "動画サイト",
             "proactiveVideoChatTooltip": "動画コンテンツを使用してチャット",
+            "proactivePersonalChat": "アクティビティ更新",
+            "proactivePersonalChatTooltip": "連携しているプラットフォームの更新情報をもとに話しかける",
+            "proactiveMusicChat": "音楽提案",
+            "proactiveMusicChatTooltip": "おすすめの音楽を提案しながら話しかける",
             "agentMaster": "Agentマスタースイッチ",
             "keyboardControl": "キーボード/マウス操作",
             "userPlugin": "ユーザープラグイン",
@@ -2264,7 +2268,42 @@
         "status": {
             "active": "● 準備完了",
             "inactive": "○ 未設定"
+        },
+        "qrLogin": {
+            "tryQR": "または...QRコードログインを試しますか？",
+            "openQR": "📱 QRログインを開く",
+            "loading": "QRコードを取得中...",
+            "scanTitle": "📱 {{platform}} QRログイン",
+            "waiting": "スキャン待ち...",
+            "validFor": "QRコード有効期限: {{seconds}}秒",
+            "refreshQR": "QRコードを更新",
+            "fetchFailed": "QRコードの取得に失敗しました、後でもう一度お試しください",
+            "retry": "再試行",
+            "networkError": "ネットワークリクエストに失敗しました、接続を確認してください",
+            "status": {
+                "success": "✅ {{message}}",
+                "expired": "❌ {{message}}、更新してください",
+                "scanned": "📱 {{message}}",
+                "waiting": "{{message}}..."
+            },
+            "successAlert": "QRログイン成功！Cookieが自動入力されました。「設定を保存」をクリックしてください"
         }
+    },
+    "music": {
+        "unknownTrack": "不明な曲",
+        "unknownArtist": "不明なアーティスト",
+        "play": "再生",
+        "pause": "一時停止",
+        "playing": "再生中",
+        "paused": "一時停止",
+        "searching": "検索中: {{query}}",
+        "notFound": "曲が見つかりません: {{query}}",
+        "nowPlaying": "再生中: {{name}}",
+        "showPlaylist": "プレイリストを表示",
+        "hidePlaylist": "プレイリストを非表示",
+        "searchFailed": "音楽検索に失敗しました",
+        "playError": "再生エラー",
+        "ended": "終了"
     },
     "notice": {
         "voiceMigration": {
