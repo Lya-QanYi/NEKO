@@ -307,6 +307,7 @@ VRMManager.prototype.setupFloatingButtons = function() {
     // 处理"请她回来"事件
     const returnHandler = () => {
         this._isInReturnState = false;
+        this._snapUIPosition = true;
         if (this._returnButtonContainer) this._returnButtonContainer.style.display = 'none';
 
         const bc = document.getElementById('vrm-floating-buttons');
@@ -550,16 +551,21 @@ VRMManager.prototype._startUIUpdateLoop = function() {
                     const boundedY = Math.max(20, Math.min(targetY, screenHeight - actualToolbarHeight - 20));
                     const boundedX = Math.max(0, Math.min(targetX, screenWidth - actualToolbarWidth));
 
-                    const currentLeft = parseFloat(buttonsContainer.style.left) || 0;
-                    const currentTop = parseFloat(buttonsContainer.style.top) || 0;
-                    const dist = Math.sqrt(Math.pow(boundedX - currentLeft, 2) + Math.pow(boundedY - currentTop, 2));
-                    if (dist > 0.5) {
-                        // 平滑插值防止旋转时闪烁抖动
-                        const lerpFactor = 0.15;
-                        const smoothX = currentLeft + (boundedX - currentLeft) * lerpFactor;
-                        const smoothY = currentTop + (boundedY - currentTop) * lerpFactor;
-                        buttonsContainer.style.left = `${smoothX}px`;
-                        buttonsContainer.style.top = `${smoothY}px`;
+                    const rawLeft = parseFloat(buttonsContainer.style.left);
+                    if (this._snapUIPosition || Number.isNaN(rawLeft)) {
+                        if (canvasWidth > 0 && canvasHeight > 0) {
+                            buttonsContainer.style.left = `${boundedX}px`;
+                            buttonsContainer.style.top = `${boundedY}px`;
+                            this._snapUIPosition = false;
+                        }
+                    } else {
+                        const currentTop = parseFloat(buttonsContainer.style.top) || boundedY;
+                        const dist = Math.sqrt(Math.pow(boundedX - rawLeft, 2) + Math.pow(boundedY - currentTop, 2));
+                        if (dist > 0.5) {
+                            const lerpFactor = 0.15;
+                            buttonsContainer.style.left = `${rawLeft + (boundedX - rawLeft) * lerpFactor}px`;
+                            buttonsContainer.style.top = `${currentTop + (boundedY - currentTop) * lerpFactor}px`;
+                        }
                     }
 
                     if (lockIcon && !this._isInReturnState) {
@@ -576,15 +582,20 @@ VRMManager.prototype._startUIUpdateLoop = function() {
                         const boundedLockX = Math.max(0, Math.min(lockTargetX, maxLockX));
                         const boundedLockY = Math.max(20, Math.min(lockTargetY, maxLockY));
 
-                        const currentLockLeft = parseFloat(lockIcon.style.left) || 0;
-                        const currentLockTop = parseFloat(lockIcon.style.top) || 0;
-                        const lockDist = Math.sqrt(Math.pow(boundedLockX - currentLockLeft, 2) + Math.pow(boundedLockY - currentLockTop, 2));
-                        if (lockDist > 0.5) {
-                            const lerpFactor = 0.15;
-                            const smoothLockX = currentLockLeft + (boundedLockX - currentLockLeft) * lerpFactor;
-                            const smoothLockY = currentLockTop + (boundedLockY - currentLockTop) * lerpFactor;
-                            lockIcon.style.left = `${smoothLockX}px`;
-                            lockIcon.style.top = `${smoothLockY}px`;
+                        const rawLockLeft = parseFloat(lockIcon.style.left);
+                        if (Number.isNaN(rawLockLeft)) {
+                            if (canvasWidth > 0 && canvasHeight > 0) {
+                                lockIcon.style.left = `${boundedLockX}px`;
+                                lockIcon.style.top = `${boundedLockY}px`;
+                            }
+                        } else {
+                            const currentLockTop = parseFloat(lockIcon.style.top) || boundedLockY;
+                            const lockDist = Math.sqrt(Math.pow(boundedLockX - rawLockLeft, 2) + Math.pow(boundedLockY - currentLockTop, 2));
+                            if (lockDist > 0.5) {
+                                const lerpFactor = 0.15;
+                                lockIcon.style.left = `${rawLockLeft + (boundedLockX - rawLockLeft) * lerpFactor}px`;
+                                lockIcon.style.top = `${currentLockTop + (boundedLockY - currentLockTop) * lerpFactor}px`;
+                            }
                         }
                         lockIcon.style.display = (this._shouldShowVrmLockIcon && this._shouldShowVrmLockIcon()) ? 'block' : 'none';
 
