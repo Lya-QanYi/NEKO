@@ -63,9 +63,9 @@ jobs:
 
       # ── 推送结果到 Discord（仅当 secret 存在时） ──
       - name: Send Discord notification
-        if: ${{ secrets.DISCORD_HEALTH_WEBHOOK_URL != '' }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_HEALTH_WEBHOOK_URL }}
+        if: env.DISCORD_WEBHOOK_URL != ''
         run: |
           TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
