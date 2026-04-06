@@ -478,6 +478,7 @@
         "RESPONSE_INVALID": "AI回覆不符合要求，已放棄輸出",
         "NO_USER_MESSAGE": "⚠️ 對話歷史中沒有使用者訊息，無法生成回覆",
         "LLM_RETRY": "⚠️ LLM {{error_type}}，正在重試（{{attempt}}/{{max_retries}}）...",
+        "LLM_UPSTREAM_ERROR": "⚠️ 抱歉喵，上游AI服務商內部錯誤，正在自動重試...",
         "LLM_CONNECTION_EXHAUSTED": "💥 LLM連接失敗（{{error_type}}），已重試{{max_retries}}次: {{error}}",
         "TEXT_GEN_ERROR": "💥 文字生成異常: {{error_type}}: {{error}}",
         "LLM_NO_RESPONSE": "💥 LLM未回傳任何回覆，請檢查API連接和配置",
