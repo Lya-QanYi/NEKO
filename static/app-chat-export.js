@@ -490,7 +490,8 @@
         for (var i = 0; i < entries.length; i += 1) {
             var entry = entries[i];
             var mediaList = entry.mediaDescriptors || [];
-            var loaded = [];
+            var imageDescriptors = [];
+            var promises = [];
             for (var j = 0; j < mediaList.length; j += 1) {
                 var descriptor = mediaList[j];
                 if (!descriptor || descriptor.type !== 'image') continue;
@@ -505,13 +506,18 @@
                         });
                     cache.set(key, promise);
                 }
-                var image = await promise;
-                if (image) {
-                    loaded.push({ type: 'image', image: image, alt: descriptor.alt });
+                imageDescriptors.push(descriptor);
+                promises.push(promise);
+            }
+            var images = await Promise.all(promises);
+            var loaded = [];
+            for (var k = 0; k < images.length; k += 1) {
+                if (images[k]) {
+                    loaded.push({ type: 'image', image: images[k], alt: imageDescriptors[k].alt });
                 } else {
                     loaded.push({
                         type: 'note',
-                        text: (descriptor.alt ? descriptor.alt + ' — ' : '')
+                        text: (imageDescriptors[k].alt ? imageDescriptors[k].alt + ' — ' : '')
                             + translateLabel('chat.exportImageLabel', 'Image')
                     });
                 }
