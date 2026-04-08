@@ -1892,6 +1892,24 @@
 
     async function openPreviewModal() {
         var modal = ensurePreviewModal();
+
+        // Re-register localeHandler if it was removed on previous close
+        if (!modal._localeHandler) {
+            var localeHandler = function () {
+                modal.closeButton.setAttribute('aria-label', translateLabel('common.close', 'Close'));
+                modal.title.textContent = translateLabel('chat.exportPreviewTitle', 'Export Preview');
+                modal.frame.setAttribute('title', translateLabel('chat.exportPreviewTitle', 'Export Preview'));
+                modal.previewImage.alt = translateLabel('chat.exportPreviewTitle', 'Export Preview');
+                modal.selectAllButton.textContent = translateLabel('chat.exportSelectAll', 'Select All');
+                modal.selectNoneButton.textContent = translateLabel('chat.exportSelectNone', 'Clear');
+                modal.selectInvertButton.textContent = translateLabel('chat.exportSelectInvert', 'Invert');
+                modal.copyButton.textContent = translateLabel('chat.copyMarkdown', 'Copy Markdown');
+                modal.openWindowButton.textContent = translateLabel('chat.previewOpenWindow', 'Open In Window');
+            };
+            window.addEventListener('localechange', localeHandler);
+            modal._localeHandler = localeHandler;
+        }
+
         modal.backdrop.hidden = false;
         modal.panel.hidden = false;
 
@@ -1917,6 +1935,7 @@
     function closePreviewModal() {
         var modal = state.previewModal;
         if (!modal) return;
+        state.previewRenderToken += 1;
         modal.backdrop.hidden = true;
         modal.panel.hidden = true;
         modal.panel.classList.remove('is-open');
