@@ -113,7 +113,10 @@ window.Jukebox = {
     observer: null,
     songElements: {},
     tooltipElement: null,
-    tooltipTimeout: null
+    tooltipTimeout: null,
+    // 窗口拖拽状态
+    isDragging: false,
+    dragOffset: { x: 0, y: 0 }
   },
 
   showTooltip: function(element, text) {
@@ -459,8 +462,12 @@ window.Jukebox = {
 
     show: function() {
       if (this.element) {
-        this.element.style.display = 'block';
+        this.element.style.display = 'flex';
         this.isVisible = true;
+        // 如果尚未被拖拽过，定位到点歌台左侧
+        if (!this.element.style.left) {
+          this.positionNextToJukebox();
+        }
         // 刷新数据
         this.load();
       }
@@ -471,6 +478,27 @@ window.Jukebox = {
         this.element.style.display = 'none';
         this.isVisible = false;
       }
+    },
+
+    positionNextToJukebox: function() {
+      const wrapper = Jukebox.State.container;
+      if (!wrapper || !this.element) return;
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const panelWidth = 450;
+      const gap = 10;
+      const viewportWidth = document.documentElement.clientWidth;
+      const maxLeft = Math.max(0, viewportWidth - panelWidth);
+      let left = wrapperRect.left - panelWidth - gap;
+      let top = wrapperRect.bottom - this.element.offsetHeight;
+      // 如果左侧空间不够，放到右侧
+      if (left < 0) {
+        left = wrapperRect.right + gap;
+      }
+      // 限制在视口内
+      left = Math.min(Math.max(0, left), maxLeft);
+      top = Math.max(0, top);
+      this.element.style.left = left + 'px';
+      this.element.style.top = top + 'px';
     },
 
     create: function() {
@@ -2001,10 +2029,15 @@ window.Jukebox = {
     },
 
     destroy: function() {
+      if (this._panelDragCleanup) {
+        this._panelDragCleanup();
+        this._panelDragCleanup = null;
+      }
       if (this.element) {
         this.element.remove();
         this.element = null;
       }
+      this.isVisible = false;
       this.data = { songs: {}, actions: {}, bindings: {} };
     },
 
@@ -2131,6 +2164,8 @@ window.Jukebox = {
       const FC = C.formatColors;
       return `
         .jukebox-sam-panel {
+          position: fixed;
+          z-index: 100010;
           background: ${C.panel.background};
           color: ${C.panel.color};
           padding: 15px;
@@ -2143,6 +2178,7 @@ window.Jukebox = {
           box-sizing: border-box;
           border: 2px solid transparent;
           transition: border-color 0.3s, box-shadow 0.3s;
+          pointer-events: auto;
         }
 
         .jukebox-sam-panel.sam-file-drag-over {
@@ -2158,6 +2194,24 @@ window.Jukebox = {
           padding-bottom: 10px;
           border-bottom: 1px solid ${C.tabs.borderBottom};
           gap: 10px;
+          cursor: grab;
+          user-select: none;
+          -webkit-user-select: none;
+        }
+
+        .sam-header:active {
+          cursor: grabbing;
+        }
+
+        body.sam-panel-dragging {
+          user-select: none;
+          -webkit-user-select: none;
+          cursor: grabbing !important;
+        }
+
+        body.sam-panel-dragging .jukebox-sam-panel {
+          transition: none !important;
+          opacity: 0.9;
         }
 
         .sam-title {
@@ -3314,6 +3368,15 @@ window.Jukebox = {
   close: function() {
     Jukebox.stopPlayback();
     
+    // 销毁管理器面板（移除 DOM 节点 + 清理拖拽监听）
+    Jukebox.SongActionManager.destroy();
+    
+    // 清理点歌台拖拽事件监听
+    if (Jukebox.State._dragCleanup) {
+      Jukebox.State._dragCleanup();
+      Jukebox.State._dragCleanup = null;
+    }
+    
     if (Jukebox.State.container) {
       Jukebox.State.container.remove();
       Jukebox.State.container = null;
@@ -3336,9 +3399,6 @@ window.Jukebox = {
       jukeboxButton.classList.remove('active');
     }
     
-    // 同时关闭管理器UI
-    Jukebox.SongActionManager.hide();
-    
     console.log('[Jukebox] 点歌台已关闭');
   },
   
@@ -3346,6 +3406,12 @@ window.Jukebox = {
     Jukebox.stopPlayback();
     
     Jukebox.SongActionManager.destroy();
+    
+    // 清理拖拽事件监听
+    if (Jukebox.State._dragCleanup) {
+      Jukebox.State._dragCleanup();
+      Jukebox.State._dragCleanup = null;
+    }
     
     if (Jukebox.State.container) {
       Jukebox.State.container.remove();
@@ -3458,12 +3524,171 @@ window.Jukebox = {
       </div>
     `;
     
-    wrapper.appendChild(sidePanel);
     wrapper.appendChild(jukeboxContainer);
     document.body.appendChild(wrapper);
+    document.body.appendChild(sidePanel);
     Jukebox.State.container = wrapper;
     
+    // 绑定窗口拖拽事件
+    Jukebox.bindWindowDrag(wrapper, jukeboxContainer);
+    // 绑定管理器面板拖拽事件
+    Jukebox.bindPanelDrag(sidePanel);
+    
     Jukebox.injectStyles();
+  },
+  
+  // 窗口拖拽功能
+  bindWindowDrag: function(wrapper, container) {
+    const header = container.querySelector('.jukebox-header');
+    if (!header) return;
+
+    const onMouseDown = (e) => {
+      // 忽略按钮点击
+      if (e.target.closest('.jukebox-header-buttons')) return;
+      
+      e.preventDefault();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      
+      const rect = wrapper.getBoundingClientRect();
+      
+      // 将 bottom/right 定位转换为 left/top
+      if (!wrapper.style.left) {
+        wrapper.style.left = rect.left + 'px';
+        wrapper.style.top = rect.top + 'px';
+        wrapper.style.bottom = 'auto';
+        wrapper.style.right = 'auto';
+      }
+      
+      Jukebox.State.isDragging = true;
+      Jukebox.State.dragOffset = {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+      
+      document.body.classList.add('jukebox-dragging');
+    };
+
+    const onMouseMove = (e) => {
+      if (!Jukebox.State.isDragging) return;
+      e.preventDefault();
+      
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      
+      let newLeft = clientX - Jukebox.State.dragOffset.x;
+      let newTop = clientY - Jukebox.State.dragOffset.y;
+      
+      // 边界限制
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const maxLeft = window.innerWidth - wrapperRect.width;
+      const maxTop = window.innerHeight - wrapperRect.height;
+      
+      newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+      newTop = Math.max(0, Math.min(newTop, maxTop));
+      
+      wrapper.style.left = newLeft + 'px';
+      wrapper.style.top = newTop + 'px';
+    };
+
+    const onMouseUp = () => {
+      if (!Jukebox.State.isDragging) return;
+      Jukebox.State.isDragging = false;
+      document.body.classList.remove('jukebox-dragging');
+    };
+
+    header.addEventListener('mousedown', onMouseDown);
+    header.addEventListener('touchstart', onMouseDown, { passive: false });
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('touchmove', onMouseMove, { passive: false });
+    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('touchend', onMouseUp);
+    
+    // 保存引用，方便 destroy 时清理
+    Jukebox.State._dragCleanup = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('touchmove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('touchend', onMouseUp);
+      Jukebox.State.isDragging = false;
+      document.body.classList.remove('jukebox-dragging');
+    };
+  },
+  
+  // 管理器面板拖拽功能
+  bindPanelDrag: function(panel) {
+    const header = panel.querySelector('.sam-header');
+    if (!header) return;
+
+    let isDragging = false;
+    let dragOffset = { x: 0, y: 0 };
+
+    const onMouseDown = (e) => {
+      // 忽略按钮和 tab 点击
+      if (e.target.closest('.sam-close-btn') || e.target.closest('.sam-tab')) return;
+      
+      e.preventDefault();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      
+      const rect = panel.getBoundingClientRect();
+      
+      if (!panel.style.left) {
+        panel.style.left = rect.left + 'px';
+        panel.style.top = rect.top + 'px';
+      }
+      
+      isDragging = true;
+      dragOffset = {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+      
+      document.body.classList.add('sam-panel-dragging');
+    };
+
+    const onMouseMove = (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      
+      let newLeft = clientX - dragOffset.x;
+      let newTop = clientY - dragOffset.y;
+      
+      const panelRect = panel.getBoundingClientRect();
+      const maxLeft = window.innerWidth - panelRect.width;
+      const maxTop = window.innerHeight - panelRect.height;
+      
+      newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+      newTop = Math.max(0, Math.min(newTop, maxTop));
+      
+      panel.style.left = newLeft + 'px';
+      panel.style.top = newTop + 'px';
+    };
+
+    const onMouseUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      document.body.classList.remove('sam-panel-dragging');
+    };
+
+    header.addEventListener('mousedown', onMouseDown);
+    header.addEventListener('touchstart', onMouseDown, { passive: false });
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('touchmove', onMouseMove, { passive: false });
+    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('touchend', onMouseUp);
+    
+    Jukebox.SongActionManager._panelDragCleanup = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('touchmove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('touchend', onMouseUp);
+      isDragging = false;
+      document.body.classList.remove('sam-panel-dragging');
+    };
   },
   
   injectStyles: function() {
@@ -3476,6 +3701,7 @@ window.Jukebox = {
     Jukebox.State.styleElement = style;
     
     style.textContent = `
+      /* z-index 层级: 悬浮按钮 99999 < 对话框 100000 < 点歌台/管理器 100010 < 导出预览 100020 < tooltip 100030 */
       .jukebox-wrapper {
         position: fixed;
         bottom: 20px;
@@ -3483,7 +3709,7 @@ window.Jukebox = {
         display: flex;
         align-items: flex-end;
         gap: 10px;
-        z-index: 9999;
+        z-index: 100010;
         pointer-events: none;
       }
 
@@ -3527,6 +3753,28 @@ window.Jukebox = {
         margin-bottom: 20px;
         padding-bottom: 10px;
         border-bottom: ${Jukebox.Config.header.borderBottom};
+        cursor: grab;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      
+      .jukebox-header:active {
+        cursor: grabbing;
+      }
+
+      body.jukebox-dragging {
+        user-select: none;
+        -webkit-user-select: none;
+        cursor: grabbing !important;
+      }
+
+      body.jukebox-dragging .jukebox-wrapper {
+        transition: none !important;
+      }
+
+      body.jukebox-dragging .jukebox-container {
+        transition: none !important;
+        opacity: 0.9;
       }
       
       .jukebox-header-left {
@@ -4087,7 +4335,7 @@ window.Jukebox = {
         border-radius: 4px;
         font-size: 12px;
         pointer-events: none;
-        z-index: 100000;
+        z-index: 100030;
         white-space: nowrap;
         opacity: 0;
         transition: opacity 0.15s ease;
