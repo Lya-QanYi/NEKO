@@ -52,7 +52,7 @@ export default function App({
   onTranslateToggle,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState('');
-  const [pendingDrafts, setPendingDrafts] = useState<Array<{ id: string; text: string; time: string; msgSnapshot: number }>>([]);
+  const [pendingDrafts, setPendingDrafts] = useState<Array<{ id: string; text: string; time: string; lastMsgId: string | null }>>([]);
   const canSubmit = draft.trim().length > 0 || composerAttachments.length > 0;
   const resolvedImportImageAriaLabel = importImageButtonAriaLabel || importImageButtonLabel;
   const resolvedScreenshotAriaLabel = screenshotButtonAriaLabel || screenshotButtonLabel;
@@ -62,8 +62,10 @@ export default function App({
   useEffect(() => {
     if (pendingDrafts.length === 0) return;
     const remaining = pendingDrafts.filter(d => {
+      const anchor = d.lastMsgId ? messages.findIndex(m => m.id === d.lastMsgId) : -1;
+      const newMsgs = messages.slice(anchor + 1);
       const newUserTexts = new Set(
-        messages.slice(d.msgSnapshot)
+        newMsgs
           .filter(m => m.role === 'user')
           .flatMap(m => m.blocks.flatMap(b => b.type === 'text' ? [b.text] : [])),
       );
@@ -100,7 +102,7 @@ export default function App({
         id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         text,
         time,
-        msgSnapshot: messages.length,
+        lastMsgId: messages.length > 0 ? messages[messages.length - 1].id : null,
       }]);
     }
     onComposerSubmit?.({ text });
