@@ -40,7 +40,7 @@ async def _publish_analyze_request_with_fallback(lanlan_name: str, trigger: str,
             lanlan_name=lanlan_name,
             trigger=trigger,
             messages=messages,
-            ack_timeout_s=0.5,
+            ack_timeout_s=0.8,
             retries=1,
             conversation_id=conversation_id,
         )
