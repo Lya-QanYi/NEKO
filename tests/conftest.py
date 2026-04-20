@@ -371,12 +371,15 @@ def clean_user_data_dir(tmp_path_factory):
 
     # Also patch the class method for any NEW instances that might be created
     patcher = patch("utils.config_manager.ConfigManager._get_documents_directory", return_value=tmp_path)
+    legacy_patcher = patch("utils.config_manager.ConfigManager.get_legacy_app_root_candidates", return_value=[])
     patcher.start()
+    legacy_patcher.start()
     
     try:
         yield tmp_path
     finally:
         patcher.stop()
+        legacy_patcher.stop()
         # Restore original state
         cm.docs_dir = original_docs_dir
         cm.app_docs_dir = original_app_docs_dir
@@ -402,7 +405,7 @@ def mock_page(page):
     page.on("pageerror", lambda err: print(f"Browser Error: {err}"))
     return page
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def mock_memory_server():
     """
     Runs a minimal mock memory server on a free local port to satisfy core.py's
@@ -419,6 +422,26 @@ def mock_memory_server():
     def get_memory(character: str):
         return PlainTextResponse(f"Mock memory context for {character}.")
 
+    import httpx
+
+    def _is_memory_server_ready(timeout_seconds: float = 1.0) -> bool:
+        # HTTP 级 readiness 优于裸 TCP connect —— 能确认 FastAPI 挂起来了，
+        # 不只是 socket 在听。端口走 _get_runtime_test_port 动态分配，
+        # 支持并行 pytest 运行。
+        try:
+            with httpx.Client(timeout=timeout_seconds, proxy=None, trust_env=False) as client:
+                response = client.get(f"http://127.0.0.1:{memory_port}/new_dialog/healthcheck")
+            return response.status_code == 200
+        except (httpx.HTTPError, OSError):
+            return False
+
+    try:
+        if _is_memory_server_ready():
+            yield
+            return
+    except (httpx.HTTPError, OSError) as exc:
+        logger.debug("Memory server readiness check failed, starting mock server: %s", exc)
+
     config = uvicorn.Config(app, host="127.0.0.1", port=memory_port, log_level="error")
     server = uvicorn.Server(config)
 
@@ -430,12 +453,9 @@ def mock_memory_server():
 
     start_time = time.time()
     while time.time() - start_time < 10:
-        try:
-            with socket.create_connection(("127.0.0.1", memory_port), timeout=1):
-                break
-        except (OSError, ConnectionRefusedError):
-            time.sleep(0.5)
-            continue
+        if _is_memory_server_ready():
+            break
+        time.sleep(0.5)
     else:
         raise RuntimeError(f"Mock memory server failed to start on {memory_port}")
 
