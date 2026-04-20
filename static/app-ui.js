@@ -1285,7 +1285,6 @@
             state.container.setAttribute('data-dragging', 'false');
         }
         delete document.body.dataset.nekoBallDrag;
-        if (window.DragHelpers) window.DragHelpers.isDragging = false;
         multiWindowReturnBallDragState = null;
     }
 
@@ -1535,7 +1534,6 @@
                 document.head.appendChild(styleEl);
             }
             document.body.dataset.nekoBallDrag = '1';
-            if (window.DragHelpers) window.DragHelpers.isDragging = true;
             window.nekoPetDrag.start(screenX, screenY);
 
             // dragStart 的 shrink 通过异步 IPC 落到主进程，不能再靠固定帧数猜测
@@ -1584,9 +1582,6 @@
             // 先瞬间隐藏球，防止恢复 UI 时球在 (8,8) 闪烁
             container.style.transition = 'none';
             container.style.opacity = '0';
-
-            // 保留隐身 CSS 直到窗口恢复完成，防止 80x80 视口显示页面内容
-            if (window.DragHelpers) window.DragHelpers.isDragging = false;
 
             if (!state.hasMoved) {
                 container.setAttribute('data-dragging', 'true');

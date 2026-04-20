@@ -461,6 +461,24 @@ VRMManager.prototype.setupFloatingButtons = function() {
 
     this._syncButtonStatesWithGlobalState();
 
+    // 点击按钮栏/弹窗/侧面板之外的区域时，自动关闭所有弹窗
+    if (this._outsideClickHandler) {
+        document.removeEventListener('click', this._outsideClickHandler);
+    }
+    this._outsideClickHandler = (e) => {
+        const path = e.composedPath ? e.composedPath() : (e.path || []);
+        if (path.includes(buttonsContainer)) return;
+        if (path.some(n => n && n.id && n.id.startsWith('vrm-popup-'))) return;
+        if (path.some(n => n && typeof n.hasAttribute === 'function' && n.hasAttribute('data-neko-sidepanel'))) return;
+        const openPopup = Array.from(document.querySelectorAll('[id^="vrm-popup-"]')).find(el =>
+            getComputedStyle(el).display === 'flex');
+        if (!openPopup) return;
+        this.closeAllPopups();
+    };
+    document.addEventListener('click', this._outsideClickHandler);
+    this._uiWindowHandlers = this._uiWindowHandlers || [];
+    this._uiWindowHandlers.push({ event: 'click', handler: this._outsideClickHandler, target: document });
+
     // 通知外部浮动按钮已就绪
     window.dispatchEvent(new CustomEvent('live2d-floating-buttons-ready'));
 };
@@ -735,9 +753,6 @@ VRMManager.prototype._setupReturnButtonDrag = function (returnButtonContainer) {
         pendingClientX = clientX;
         pendingClientY = clientY;
 
-        // 设置全局拖拽标志，供 preload 等跳过昂贵操作
-        if (window.DragHelpers) window.DragHelpers.isDragging = true;
-
         // 获取当前容器的实际位置（考虑居中定位）
         const rect = returnButtonContainer.getBoundingClientRect();
         containerStartX = rect.left;
@@ -818,9 +833,6 @@ VRMManager.prototype._setupReturnButtonDrag = function (returnButtonContainer) {
             setTimeout(() => returnButtonContainer.setAttribute('data-dragging', 'false'), 10);
             isDragging = false;
             returnButtonContainer.style.cursor = 'grab';
-
-            // 清除全局拖拽标志
-            if (window.DragHelpers) window.DragHelpers.isDragging = false;
 
             // 恢复拖拽期间禁用的视觉效果
             const returnBtn = returnButtonContainer.querySelector('#vrm-btn-return');
