@@ -5489,6 +5489,13 @@
                     this.appendGuideChatMessage(bubbleText, {
                         textKey: performance.bubbleTextKey || ''
                     });
+                } else if (bubbleText) {
+                    // Electron Pet 模式下 shouldNarrateInChat=false，否则文案只剩语音、无可见气泡。
+                    this.overlay.showBubble(bubbleText, {
+                        title: this.getGuideAssistantName(),
+                        emotion: performance.emotion || 'neutral',
+                        anchorRect: anchorRect
+                    });
                 }
                 if (performance.emotion) {
                     this.emotionBridge.apply(performance.emotion);
