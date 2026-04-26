@@ -7,7 +7,7 @@ window.AgentHUD = window.AgentHUD || {};
 
 var PLUGIN_DASHBOARD_FIRST_VISIT_STORAGE_KEY = 'neko_plugin_dashboard_first_visit_completed';
 var PLUGIN_DASHBOARD_REDIRECT_URL = '/api/agent/user_plugin/dashboard';
-var PLUGIN_DASHBOARD_FIRST_VISIT_URL = `${PLUGIN_DASHBOARD_REDIRECT_URL}?yui_guide=1`;
+var PLUGIN_DASHBOARD_FIRST_VISIT_URL = PLUGIN_DASHBOARD_REDIRECT_URL;
 
 function hasSeenPluginDashboardFirstVisit() {
     try {

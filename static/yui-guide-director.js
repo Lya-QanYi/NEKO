@@ -183,9 +183,11 @@
     const INTRO_GREETING_REPLY_TEXT_KEY = 'tutorial.yuiGuide.lines.introGreetingReply';
     const TAKEOVER_PLUGIN_DASHBOARD_TEXT = '有了它们，我不光能看 B 站弹幕，还能帮你关灯开空调…… 本喵就是无所不能的超级猫猫神！哼哼～';
     const TAKEOVER_PLUGIN_DASHBOARD_TEXT_KEY = 'tutorial.yuiGuide.lines.takeoverPluginPreviewDashboard';
+    const TAKEOVER_PLUGIN_DASHBOARD_DURATION_MS = 9000;
     const TAKEOVER_SETTINGS_DETAIL_TEXT = '你看，这里可以穿我的新衣服、给我换一个好听的声音……换一个猫娘或是修改记忆？等一下！你在干嘛？该不会是想把我换掉吧？啊啊啊不行！快关掉快关掉！';
     const TAKEOVER_SETTINGS_DETAIL_TEXT_KEY = 'tutorial.yuiGuide.lines.takeoverSettingsPeekDetail';
     const INTRO_SKIP_ACTION_ID = 'yui-guide-intro-skip-chat';
+    const DEFAULT_SPOTLIGHT_PADDING = 6;
     const INTRO_SKIP_LABEL_KEY = 'tutorial.yuiGuide.buttons.skipChat';
     const INTRO_HELLO_LABEL_KEY = 'tutorial.yuiGuide.buttons.sayHello';
     const REACT_CHAT_ACTION_EVENT = 'react-chat-window:action';
@@ -1370,6 +1372,7 @@
             this.virtualSpotlights = new Map();
             this.preciseHighlightElements = new Set();
             this.spotlightVariantElements = new Set();
+            this.spotlightGeometryHintElements = new Set();
             this.retainedExtraSpotlightElements = [];
             this.sceneExtraSpotlightElements = [];
             this.pluginDashboardHandoff = null;
@@ -1585,7 +1588,7 @@
             }
 
             const normalizedOptions = options || {};
-            const padding = Number.isFinite(normalizedOptions.padding) ? normalizedOptions.padding : 12;
+            const padding = Number.isFinite(normalizedOptions.padding) ? normalizedOptions.padding : DEFAULT_SPOTLIGHT_PADDING;
             const elementKey = String(key);
             let element = this.virtualSpotlights.get(elementKey) || null;
             if (!element) {
@@ -1672,6 +1675,42 @@
                 element.removeAttribute('data-yui-guide-spotlight-variant');
             });
             this.spotlightVariantElements.clear();
+        }
+
+        clearSpotlightGeometryHints() {
+            this.spotlightGeometryHintElements.forEach((element) => {
+                if (!element || typeof element.removeAttribute !== 'function') {
+                    return;
+                }
+
+                element.removeAttribute('data-yui-guide-spotlight-padding');
+                element.removeAttribute('data-yui-guide-spotlight-radius');
+            });
+            this.spotlightGeometryHintElements.clear();
+        }
+
+        setSpotlightGeometryHint(element, options) {
+            if (!element || typeof element.setAttribute !== 'function') {
+                return;
+            }
+
+            const normalizedOptions = options || {};
+            const padding = Number.isFinite(normalizedOptions.padding) ? normalizedOptions.padding : null;
+            const radius = Number.isFinite(normalizedOptions.radius) ? normalizedOptions.radius : null;
+
+            if (padding !== null) {
+                element.setAttribute('data-yui-guide-spotlight-padding', String(padding));
+            } else {
+                element.removeAttribute('data-yui-guide-spotlight-padding');
+            }
+
+            if (radius !== null) {
+                element.setAttribute('data-yui-guide-spotlight-radius', String(radius));
+            } else {
+                element.removeAttribute('data-yui-guide-spotlight-radius');
+            }
+
+            this.spotlightGeometryHintElements.add(element);
         }
 
         setSpotlightVariantHints(entries) {
@@ -1942,7 +1981,7 @@
                     'settings-character-children-bundle',
                     [sidePanelVisible],
                     {
-                        padding: 10,
+                        padding: DEFAULT_SPOTLIGHT_PADDING,
                         radius: 18
                     }
                 )
@@ -1951,7 +1990,7 @@
                         'settings-character-children-bundle',
                         [appearanceItem, voiceCloneItem],
                         {
-                            padding: 10,
+                            padding: DEFAULT_SPOTLIGHT_PADDING,
                             radius: 18
                         }
                     )
@@ -2025,7 +2064,7 @@
 
             if (Array.isArray(target)) {
                 return this.createUnionSpotlight(fallbackKey || 'highlight-union', target, {
-                    padding: 12,
+                    padding: DEFAULT_SPOTLIGHT_PADDING,
                     radius: 18
                 });
             }
@@ -3900,6 +3939,9 @@
             if (!catPawButton || guardFailed()) {
                 return null;
             }
+            this.setSpotlightGeometryHint(catPawButton, {
+                padding: 4
+            });
 
             // 1-3. 高亮猫爪 -> 平滑移动 -> 点击并打开猫爪面板
             this.addRetainedExtraSpotlight(catPawButton);
@@ -3996,6 +4038,9 @@
             if (!managementMovementTarget || guardFailed()) {
                 return null;
             }
+            this.setSpotlightGeometryHint(managementButton, {
+                padding: 22
+            });
 
             // 11-13. 高亮管理面板 -> 移动到高亮中心点 -> 点击并同步打开真实页面
             this.addRetainedExtraSpotlight(managementButton);
@@ -4184,17 +4229,31 @@
                 this.clearVirtualSpotlight('plugin-management-entry');
                 await this.closeAgentPanel().catch(() => {});
             };
+            const dashboardVoiceKey = 'takeover_plugin_preview_dashboard';
+            const dashboardAudioUrl = this.voiceQueue && typeof this.voiceQueue.resolveGuideAudioSrc === 'function'
+                ? this.voiceQueue.resolveGuideAudioSrc(dashboardVoiceKey)
+                : '';
+            const dashboardNarrationStartedAtMs = Date.now();
             const dashboardNarrationPromise = this.speakLineAndWait(dashboardText, {
-                voiceKey: 'takeover_plugin_preview_dashboard'
+                voiceKey: dashboardVoiceKey
             }).catch(() => {}).finally(() => closePluginPreviewPanel());
 
-            const completed = await this.waitForPluginDashboardPerformance(dashboardWindow, {
+            const pluginDashboardPerformancePromise = this.waitForPluginDashboardPerformance(dashboardWindow, {
                 line: '',
-                closeOnDone: true
+                closeOnDone: true,
+                narrationDurationMs: TAKEOVER_PLUGIN_DASHBOARD_DURATION_MS,
+                voiceKey: dashboardVoiceKey,
+                audioUrl: dashboardAudioUrl,
+                narrationStartedAtMs: dashboardNarrationStartedAtMs
             }).catch(() => {
                 return false;
             });
             await dashboardNarrationPromise;
+            await this.closeNamedWindow(PLUGIN_DASHBOARD_WINDOW_NAME);
+            if (this.pluginDashboardHandoff && this.pluginDashboardHandoff.windowRef === dashboardWindow && typeof this.pluginDashboardHandoff.resolve === 'function') {
+                this.pluginDashboardHandoff.resolve(false);
+            }
+            await pluginDashboardPerformancePromise;
             this.customSecondarySpotlightTarget = null;
             this.clearSceneExtraSpotlights();
             this.clearRetainedExtraSpotlights();
@@ -4204,7 +4263,6 @@
                 this.setAgentMasterEnabled(false).catch(() => {}),
                 this.setAgentFlagEnabled('user_plugin_enabled', false).catch(() => {})
             ]);
-            await this.closeNamedWindow(PLUGIN_DASHBOARD_WINDOW_NAME);
             await this.waitForHomeMainUIReady(3600);
             if (runId !== this.sceneRunId || this.isStopping()) {
                 return;
@@ -4219,6 +4277,9 @@
         async runSettingsPeekScene(step, performance, runId) {
             this.customSecondarySpotlightTarget = null;
             const settingsButton = this.resolveElement(performance.cursorTarget || step.anchor);
+            this.setSpotlightGeometryHint(settingsButton, {
+                padding: 4
+            });
             const introText = this.resolvePerformanceBubbleText(performance);
             await this.closeAgentPanel();
             this.clearPreciseHighlights();
@@ -4441,6 +4502,7 @@
             this.clearAllVirtualSpotlights();
             this.clearPreciseHighlights();
             this.clearSpotlightVariantHints();
+            this.clearSpotlightGeometryHints();
             this.clearAllExtraSpotlights();
             this.cleanupTutorialReturnButtons();
             this.customSecondarySpotlightTarget = null;
@@ -6017,6 +6079,7 @@
             this.clearAllVirtualSpotlights();
             this.clearPreciseHighlights();
             this.clearSpotlightVariantHints();
+            this.clearSpotlightGeometryHints();
             this.clearAllExtraSpotlights();
             this.cleanupTutorialReturnButtons();
             this.customSecondarySpotlightTarget = null;

@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-from starlette.requests import Request
 
 from utils.config_manager import ConfigManager, get_config_manager
 
@@ -96,29 +95,13 @@ def test_main_agent_router_expected_proxy_endpoints_exist():
 
 
 @pytest.mark.asyncio
-async def test_main_agent_router_plugin_dashboard_redirect_preserves_yui_handoff_query():
+async def test_main_agent_router_plugin_dashboard_redirect_strips_yui_handoff_query():
     from config import USER_PLUGIN_SERVER_PORT
     from main_routers.agent_router import redirect_plugin_dashboard
 
-    scope = {
-        "type": "http",
-        "method": "GET",
-        "scheme": "http",
-        "server": ("testserver", 80),
-        "client": ("127.0.0.1", 12345),
-        "root_path": "",
-        "path": "/api/agent/user_plugin/dashboard",
-        "raw_path": b"/api/agent/user_plugin/dashboard",
-        "query_string": b"yui_guide=1&flow_id=home_yui_guide_v1&source_page=home&resume_scene=plugin_dashboard_landing&handoff_token=h_abc123",
-        "headers": [],
-    }
-    response = await redirect_plugin_dashboard(Request(scope))
+    response = await redirect_plugin_dashboard()
 
-    assert response.headers["location"] == (
-        f"http://127.0.0.1:{USER_PLUGIN_SERVER_PORT}/ui"
-        "?yui_guide=1&flow_id=home_yui_guide_v1&source_page=home"
-        "&resume_scene=plugin_dashboard_landing&handoff_token=h_abc123"
-    )
+    assert response.headers["location"] == f"http://127.0.0.1:{USER_PLUGIN_SERVER_PORT}/ui"
 
 
 def test_agent_server_expected_event_driven_endpoints_exist():
@@ -264,24 +247,14 @@ def test_universal_tutorial_manager_normalizes_api_key_handoff_and_resume_scene_
         assert expected in source
 
 
-def test_plugin_manager_bootstraps_yui_overlay_bridge_and_runtime():
+def test_plugin_manager_bootstraps_plugin_dashboard_runtime_without_overlay_bridge():
     app_source = Path("frontend/plugin-manager/src/App.vue").read_text(encoding="utf-8")
     main_source = Path("frontend/plugin-manager/src/main.ts").read_text(encoding="utf-8")
-    bridge_source = Path("frontend/plugin-manager/src/composables/useYuiTutorialBridge.ts").read_text(encoding="utf-8")
 
-    assert "<YuiTutorialOverlay />" in app_source
-    assert "useYuiTutorialBridge" in main_source
-    assert "tutorialBridge.init()" in main_source
+    assert "<YuiTutorialOverlay />" not in app_source
+    assert "useYuiTutorialBridge" not in main_source
+    assert "tutorialBridge.init()" not in main_source
     assert "initPluginDashboardYuiGuideRuntime()" in main_source
-    for expected in (
-        "const QUERY_KEY_GUIDE = 'yui_guide'",
-        "const QUERY_KEY_FLOW_ID = 'flow_id'",
-        "const QUERY_KEY_SOURCE_PAGE = 'source_page'",
-        "const QUERY_KEY_RESUME_SCENE = 'resume_scene'",
-        "const QUERY_KEY_HANDOFF_TOKEN = 'handoff_token'",
-        "const COMPLETE_MESSAGE_TYPE = 'neko:yui-guide:plugin-dashboard-complete'",
-    ):
-        assert expected in bridge_source
 
 
 def test_task_executor_format_messages_marks_latest_user_request():

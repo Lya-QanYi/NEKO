@@ -274,28 +274,6 @@
         return url.toString();
     }
 
-    function buildPluginDashboardHandoffUrl(tokenObj, resumeScene) {
-        var handoffParams = ['yui_guide=1'];
-        var flowId = tokenObj && tokenObj.flow_id ? tokenObj.flow_id : HANDOFF_FLOW_ID;
-        // source_page 必须随 URL 带过去：子页 useYuiTutorialBridge 从 query 读
-        // sourcePage，runtime 的 bridge fallback 只在 sourcePage === 'home' 时启用，
-        // 漏带就会让 START_EVENT 没赶上时插件页拿不到接管恢复，教程沉默卡死。
-        var sourcePage = tokenObj && typeof tokenObj.source_page === 'string' && tokenObj.source_page
-            ? tokenObj.source_page
-            : 'home';
-        var resolvedResumeScene = tokenObj && typeof tokenObj.resume_scene === 'string'
-            ? tokenObj.resume_scene
-            : (resumeScene || '');
-        var handoffToken = tokenObj && tokenObj.token ? tokenObj.token : '';
-
-        handoffParams.push('flow_id=' + encodeURIComponent(flowId));
-        handoffParams.push('source_page=' + encodeURIComponent(sourcePage));
-        handoffParams.push('resume_scene=' + encodeURIComponent(resolvedResumeScene));
-        handoffParams.push('handoff_token=' + encodeURIComponent(handoffToken));
-
-        return buildPluginDashboardUrl(handoffParams);
-    }
-
     function getHandoffTokenSignature(tokenObj) {
         if (!tokenObj) return '';
         return tokenObj.signature || tokenObj.id || tokenObj.token || '';
@@ -1000,9 +978,7 @@
     }
 
     function openPluginDashboard(resumeScene, options) {
-        return openPageWithHandoff(
-            'plugin_dashboard',
-            resumeScene || null,
+        return openPage(
             buildPluginDashboardUrl(),
             'plugin_dashboard',
             buildCenteredWindowFeatures(),
@@ -1101,20 +1077,27 @@
             targetPage === 'plugin_dashboard'
             || normalizeWindowName(windowName) === normalizeWindowName('plugin_dashboard')
         );
-        var tokenObj = createHandoffToken(targetPage, resumeScene);
-        if (!tokenObj) {
-            console.warn('[YuiGuideHandoff] openPageWithHandoff: token 创建失败，回退到普通打开');
+        if (isPluginDashboardTarget) {
             return openPage(
-                isPluginDashboardTarget ? buildPluginDashboardUrl() : openUrl,
+                buildPluginDashboardUrl(),
                 windowName,
                 features,
                 options
             );
         }
 
-        var targetUrl = isPluginDashboardTarget
-            ? buildPluginDashboardHandoffUrl(tokenObj, resumeScene)
-            : openUrl;
+        var tokenObj = createHandoffToken(targetPage, resumeScene);
+        if (!tokenObj) {
+            console.warn('[YuiGuideHandoff] openPageWithHandoff: token 创建失败，回退到普通打开');
+            return openPage(
+                openUrl,
+                windowName,
+                features,
+                options
+            );
+        }
+
+        var targetUrl = openUrl;
 
         return openPage(targetUrl, windowName, features, options).then(function (childWin) {
             if (childWin) {
