@@ -828,6 +828,9 @@ function createSidePanelMenuItem(manager, prefix, item) {
                 }
                 setTimeout(() => { isOpening = false; }, 500);
             } else if (item.url) {
+                if (typeof finalUrl === 'string' && (finalUrl.startsWith('/character_card_manager') || finalUrl.startsWith('/chara_manager'))) {
+                    windowName = 'neko_chara_manager';
+                }
                 isOpening = true;
                 if (typeof window.openOrFocusWindow === 'function') {
                     window.openOrFocusWindow(finalUrl, windowName);
@@ -2257,7 +2260,7 @@ const AvatarPopupMixin = {
                         }
                         setTimeout(() => { isOpening = false; }, 500);
                     } else {
-                        if (typeof finalUrl === 'string' && finalUrl.startsWith('/chara_manager')) windowName = 'neko_chara_manager';
+                        if (typeof finalUrl === 'string' && (finalUrl.startsWith('/character_card_manager') || finalUrl.startsWith('/chara_manager'))) windowName = 'neko_chara_manager';
 
                         isOpening = true;
                         if (typeof window.openOrFocusWindow === 'function') {
@@ -2466,7 +2469,6 @@ const AvatarPopupMixin = {
             const settingsItems = [
                 { id: 'api-keys', label: window.t ? window.t('settings.menu.apiKeys') : 'API密钥', labelKey: 'settings.menu.apiKeys', icon: '/static/icons/api_key_icon.png', action: 'navigate', url: '/api_key' },
                 { id: 'memory', label: window.t ? window.t('settings.menu.memoryBrowser') : '记忆浏览', labelKey: 'settings.menu.memoryBrowser', icon: '/static/icons/memory_icon.png', action: 'navigate', url: '/memory_browser' },
-                { id: 'steam-workshop', label: window.t ? window.t('settings.menu.steamWorkshop') : '创意工坊', labelKey: 'settings.menu.steamWorkshop', icon: '/static/icons/Steam_icon_logo.png', action: 'navigate', url: '/steam_workshop_manager' },
             ];
 
             settingsItems.forEach(item => {
