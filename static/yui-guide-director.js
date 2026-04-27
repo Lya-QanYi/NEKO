@@ -1780,6 +1780,20 @@
             this.syncExtraSpotlights();
         }
 
+        removeRetainedExtraSpotlight(matcher) {
+            const normalizedMatcher = typeof matcher === 'function'
+                ? matcher
+                : (candidate) => candidate === matcher;
+            this.retainedExtraSpotlightElements = this.retainedExtraSpotlightElements.filter((candidate) => {
+                try {
+                    return !normalizedMatcher(candidate);
+                } catch (_) {
+                    return true;
+                }
+            });
+            this.syncExtraSpotlights();
+        }
+
         clearRetainedExtraSpotlights() {
             this.retainedExtraSpotlightElements = [];
             this.syncExtraSpotlights();
@@ -2530,7 +2544,7 @@
             }
 
             if (stepId === 'takeover_capture_cursor' || stepId === 'takeover_plugin_preview') {
-                return fallbackTarget;
+                return this.getFloatingButtonShell(fallbackTarget) || fallbackTarget;
             }
 
             if (stepId === 'takeover_settings_peek') {
@@ -3586,7 +3600,7 @@
             const api = this.getHomeInteractionApi();
             if (api && typeof api.openPluginDashboard === 'function') {
                 try {
-                    return await api.openPluginDashboard(null, options || null);
+                    return await api.openPluginDashboard(options || null);
                 } catch (error) {
                     console.warn('[YuiGuide] openPluginDashboard 失败，改用本地兜底:', error);
                 }
@@ -3906,11 +3920,45 @@
             return !!(await normalized.action());
         }
 
+        async runPluginPreviewHomeExitSequence(targets, runId, scaleSceneMs) {
+            const normalizedTargets = targets || {};
+            const delay = async (value, minValue, maxValue) => {
+                const waitMs = typeof scaleSceneMs === 'function'
+                    ? scaleSceneMs(value, minValue, maxValue)
+                    : value;
+                return this.waitForSceneDelay(waitMs);
+            };
+            const guardFailed = () => runId !== this.sceneRunId || this.isStopping();
+            const removeHighlight = async (element) => {
+                if (!element || guardFailed()) {
+                    return;
+                }
+                this.removeRetainedExtraSpotlight(element);
+                await delay(140, 80, 260);
+            };
+
+            await removeHighlight(normalizedTargets.managementButton);
+            await removeHighlight(normalizedTargets.pluginToggle);
+            await removeHighlight(normalizedTargets.agentMasterToggle);
+            if (guardFailed()) {
+                return;
+            }
+
+            this.collapseAgentSidePanel('agent-user-plugin');
+            this.clearVirtualSpotlight('plugin-management-entry');
+            await delay(180, 100, 360);
+            if (guardFailed()) {
+                return;
+            }
+
+            await this.closeAgentPanel().catch(() => {});
+            await removeHighlight(normalizedTargets.catPawButton);
+        }
+
         async runTakeoverCaptureActionSequence(step, performance, runId) {
             this.customSecondarySpotlightTarget = null;
             this.clearPreciseHighlights();
             this.clearSceneExtraSpotlights();
-            this.overlay.clearActionSpotlight();
             this.clearRetainedExtraSpotlights();
             const timingScale = this.getGuideVoiceTimingScale(performance && performance.voiceKey);
             const scaleSceneMs = (value, minValue, maxValue) => {
@@ -3945,6 +3993,7 @@
 
             // 1-3. 高亮猫爪 -> 平滑移动 -> 点击并打开猫爪面板
             this.addRetainedExtraSpotlight(catPawButton);
+            this.overlay.clearActionSpotlight();
             const movedToCatPaw = await this.moveCursorToElement(catPawButton, scaleSceneMs(1500, 900, 2600));
             if (!movedToCatPaw || guardFailed()) {
                 return null;
@@ -4068,15 +4117,25 @@
             const clicked = await this.clickAgentSidePanelAction('agent-user-plugin', 'management-panel', {
                 keepMainUIVisible: true
             });
+            let pluginDashboardWindow = null;
             if (!clicked && runId === this.sceneRunId && !this.destroyed && !this.angryExitTriggered) {
-                const pluginDashboardWindow = await this.openPluginDashboardWindow({
+                pluginDashboardWindow = await this.openPluginDashboardWindow({
                     keepMainUIVisible: true
                 });
-                if (pluginDashboardWindow && !pluginDashboardWindow.closed) {
-                    return pluginDashboardWindow;
-                }
             }
-            return this.waitForOpenedWindow(PLUGIN_DASHBOARD_WINDOW_NAME, 6000);
+
+            if (!pluginDashboardWindow || pluginDashboardWindow.closed) {
+                pluginDashboardWindow = await this.waitForOpenedWindow(PLUGIN_DASHBOARD_WINDOW_NAME, 6000);
+            }
+            if (pluginDashboardWindow && !pluginDashboardWindow.closed) {
+                await this.runPluginPreviewHomeExitSequence({
+                    managementButton: managementButton,
+                    pluginToggle: pluginToggle,
+                    agentMasterToggle: agentMasterToggle,
+                    catPawButton: catPawButton
+                }, runId, scaleSceneMs);
+            }
+            return pluginDashboardWindow;
         }
 
         waitForPluginDashboardPerformance(windowRef, payload) {
@@ -4239,7 +4298,7 @@
             }).catch(() => {}).finally(() => closePluginPreviewPanel());
 
             const pluginDashboardPerformancePromise = this.waitForPluginDashboardPerformance(dashboardWindow, {
-                line: '',
+                line: dashboardText,
                 closeOnDone: true,
                 narrationDurationMs: TAKEOVER_PLUGIN_DASHBOARD_DURATION_MS,
                 voiceKey: dashboardVoiceKey,
@@ -4249,11 +4308,11 @@
                 return false;
             });
             await dashboardNarrationPromise;
+            const pluginDashboardCompleted = await pluginDashboardPerformancePromise;
             await this.closeNamedWindow(PLUGIN_DASHBOARD_WINDOW_NAME);
             if (this.pluginDashboardHandoff && this.pluginDashboardHandoff.windowRef === dashboardWindow && typeof this.pluginDashboardHandoff.resolve === 'function') {
-                this.pluginDashboardHandoff.resolve(false);
+                this.pluginDashboardHandoff.resolve(!!pluginDashboardCompleted);
             }
-            await pluginDashboardPerformancePromise;
             this.customSecondarySpotlightTarget = null;
             this.clearSceneExtraSpotlights();
             this.clearRetainedExtraSpotlights();
@@ -5529,6 +5588,14 @@
             }
 
             const actionSpotlightTarget = this.getActionSpotlightTarget(stepId, performance);
+            if (
+                actionSpotlightTarget
+                && (stepId === 'takeover_capture_cursor' || stepId === 'takeover_plugin_preview')
+            ) {
+                this.setSpotlightGeometryHint(actionSpotlightTarget, {
+                    padding: 4
+                });
+            }
             if (actionSpotlightTarget) {
                 this.overlay.activateSpotlight(actionSpotlightTarget);
             } else {

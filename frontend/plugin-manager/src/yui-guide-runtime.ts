@@ -22,7 +22,8 @@ const DEFAULT_PASSIVE_RESISTANCE_DISTANCE = 10
 const DEFAULT_PASSIVE_RESISTANCE_SPEED_THRESHOLD = 0.2
 const DEFAULT_PASSIVE_RESISTANCE_INTERVAL_MS = 140
 const DEFAULT_RESISTANCE_CURSOR_REVEAL_MS = 3000
-const PLUGIN_DASHBOARD_FIRST_PHASE_MS = 2000
+const PLUGIN_DASHBOARD_MOVE_TO_MAIN_MS = 780
+const PLUGIN_DASHBOARD_SCROLL_PHASE_MS = 2000
 const PLUGIN_DASHBOARD_DEFAULT_TOTAL_MS = 9000
 const RESISTANCE_LINES = [
   '喂！不要拽我啦，还没轮到你的回合呢！',
@@ -78,8 +79,18 @@ function normalizeOrigin(value: string) {
 }
 
 const DEFAULT_OPENER_ORIGIN = normalizeOrigin(import.meta.env.VITE_YUI_TUTORIAL_OPENER_ORIGIN || '')
+const DEFAULT_LOCAL_OPENER_ORIGINS = [
+  'http://127.0.0.1:48911',
+  'http://localhost:48911',
+  'https://127.0.0.1:48912',
+  'https://localhost:48912',
+] as const
 const ALLOWED_OPENER_ORIGINS = new Set(
-  [import.meta.env.VITE_YUI_TUTORIAL_ALLOWED_OPENER_ORIGINS || '', DEFAULT_OPENER_ORIGIN]
+  [
+    import.meta.env.VITE_YUI_TUTORIAL_ALLOWED_OPENER_ORIGINS || '',
+    DEFAULT_OPENER_ORIGIN,
+    ...DEFAULT_LOCAL_OPENER_ORIGINS,
+  ]
     .flatMap((value) => String(value || '').split(','))
     .map((value) => normalizeOrigin(value))
     .filter(Boolean),
@@ -204,6 +215,9 @@ function resolveSpeechLang() {
 function getAllowedOpenerOrigins() {
   const trustedOrigin = getTrustedOpenerOrigin()
   const origins = new Set<string>()
+  ALLOWED_OPENER_ORIGINS.forEach((origin) => {
+    origins.add(origin)
+  })
   if (trustedOrigin) {
     origins.add(trustedOrigin)
   }
@@ -218,12 +232,22 @@ function isAllowedOpenerEvent(event: MessageEvent) {
     return false
   }
 
-  const allowedOrigins = getAllowedOpenerOrigins()
-  if (allowedOrigins.size > 0 && (!event.origin || !allowedOrigins.has(event.origin))) {
+  const origin = typeof event.origin === 'string' ? event.origin : ''
+  if (!origin) {
     return false
   }
 
-  openerMessageOrigin = event.origin
+  if (origin === window.location.origin) {
+    openerMessageOrigin = origin
+    return true
+  }
+
+  const allowedOrigins = getAllowedOpenerOrigins()
+  if (!allowedOrigins.has(origin)) {
+    return false
+  }
+
+  openerMessageOrigin = origin
   return true
 }
 
@@ -2079,21 +2103,10 @@ class PluginDashboardGuideRuntime {
       ? Math.max(0, Date.now() - Math.round(payload.narrationStartedAtMs as number))
       : 0
     const remainingNarrationDurationMs = Math.max(0, totalNarrationDurationMs - elapsedBeforeMotionMs)
-    const firstPhaseDurationMs = Math.max(
-      0,
-      Math.min(remainingNarrationDurationMs, PLUGIN_DASHBOARD_FIRST_PHASE_MS - elapsedBeforeMotionMs),
-    )
-    const moveToMainDurationMs = firstPhaseDurationMs > 0
-      ? Math.max(1, Math.min(780, firstPhaseDurationMs))
-      : 0
-    const remainingFirstPhaseDurationMs = Math.max(0, firstPhaseDurationMs - moveToMainDurationMs)
-    const scrollDownDurationMs = remainingFirstPhaseDurationMs > 0
-      ? Math.max(1, Math.round(remainingFirstPhaseDurationMs / 2))
-      : 0
-    const scrollUpDurationMs = remainingFirstPhaseDurationMs > 0
-      ? Math.max(1, remainingFirstPhaseDurationMs - scrollDownDurationMs)
-      : 0
-    const ellipseDurationMs = Math.max(0, remainingNarrationDurationMs - firstPhaseDurationMs)
+    const moveToMainDurationMs = PLUGIN_DASHBOARD_MOVE_TO_MAIN_MS
+    const scrollDownDurationMs = Math.round(PLUGIN_DASHBOARD_SCROLL_PHASE_MS / 2)
+    const scrollUpDurationMs = PLUGIN_DASHBOARD_SCROLL_PHASE_MS - scrollDownDurationMs
+    const ellipseDurationMs = Math.max(0, remainingNarrationDurationMs - moveToMainDurationMs - scrollDownDurationMs - scrollUpDurationMs)
 
     if (!isCurrent()) {
       return
@@ -2181,6 +2194,8 @@ export function initPluginDashboardYuiGuideRuntime() {
       }
       runtime.notify(DONE_EVENT, sessionId)
       runtime.cleanup()
+    }).finally(() => {
+      receivedStartMessage = false
     })
   })
 }

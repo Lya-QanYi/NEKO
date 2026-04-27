@@ -85,6 +85,8 @@
         try {
             targetUrl = new URL(openUrl, window.location.origin).toString();
         } catch (_) {}
+        var existingWindow = window._openedWindows ? window._openedWindows[fullName] : null;
+        var hadExistingWindow = !!(existingWindow && !existingWindow.closed);
         var childWin;
 
         if (typeof window.openOrFocusWindow === 'function') {
@@ -107,6 +109,18 @@
         try {
             childWin.focus();
         } catch (_) {}
+
+        if (normalizedOptions.forceReload && hadExistingWindow) {
+            try {
+                childWin.location.replace(targetUrl);
+            } catch (_) {
+                try {
+                    childWin.location.href = targetUrl;
+                } catch (error) {
+                    console.warn('[YuiGuideHandoff] 窗口重载失败:', targetUrl, error);
+                }
+            }
+        }
 
         if (!normalizedOptions.keepMainUIVisible && typeof window.handleHideMainUI === 'function') {
             window.handleHideMainUI();
@@ -929,7 +943,7 @@
             if (toggleId === 'agent-user-plugin' && actionId === 'management-panel') {
                 // openPluginDashboard 内部 openPage 在 resolve 前已经把 childWin
                 // 同步写入 _activeWindows，再走 waitForWindowOpen 只是冗余 round-trip
-                return openPluginDashboard('plugin_dashboard_landing', options).then(function (childWin) {
+                return openPluginDashboard(options).then(function (childWin) {
                     return !!childWin;
                 });
             }
@@ -977,12 +991,15 @@
         return Promise.resolve(true);
     }
 
-    function openPluginDashboard(resumeScene, options) {
+    function openPluginDashboard(options) {
+        var normalizedOptions = Object.assign({}, options || {}, {
+            forceReload: true
+        });
         return openPage(
             buildPluginDashboardUrl(),
             'plugin_dashboard',
             buildCenteredWindowFeatures(),
-            options
+            normalizedOptions
         );
     }
 
@@ -996,6 +1013,11 @@
         }));
     }
 
+    /**
+     * @deprecated Plugin dashboard guide handoff now uses
+     * neko:yui-guide:plugin-dashboard:start and
+     * neko:yui-guide:plugin-dashboard:interrupt-ack messages.
+     */
     function listenPluginDashboardComplete(onComplete) {
         if (typeof onComplete !== 'function') return function () {};
 
@@ -1078,6 +1100,8 @@
             || normalizeWindowName(windowName) === normalizeWindowName('plugin_dashboard')
         );
         if (isPluginDashboardTarget) {
+            // Plugin dashboard uses the dedicated PLUGIN_DASHBOARD_HANDOFF_EVENT /
+            // PLUGIN_DASHBOARD_INTERRUPT_ACK_EVENT flow managed by the guide director.
             return openPage(
                 buildPluginDashboardUrl(),
                 windowName,

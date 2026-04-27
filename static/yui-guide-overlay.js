@@ -353,7 +353,8 @@
                 return null;
             }
 
-            const padding = readSpotlightNumberAttr(element, 'data-yui-guide-spotlight-padding') || DEFAULT_SPOTLIGHT_PADDING;
+            const paddingValue = readSpotlightNumberAttr(element, 'data-yui-guide-spotlight-padding');
+            const padding = paddingValue == null ? DEFAULT_SPOTLIGHT_PADDING : paddingValue;
             const rawWidth = Math.max(0, Math.round(rect.width));
             const rawHeight = Math.max(0, Math.round(rect.height));
             const rawMinEdge = Math.min(rawWidth, rawHeight);
@@ -389,8 +390,8 @@
 
             const radiusPadding = Number.isFinite(padding) ? padding : DEFAULT_SPOTLIGHT_PADDING;
             const radiusOverride = readSpotlightNumberAttr(element, 'data-yui-guide-spotlight-radius');
-            if (Number.isFinite(radiusOverride) && radiusOverride > 0) {
-                return radiusOverride;
+            if (radiusOverride != null) {
+                return Math.max(0, radiusOverride);
             }
 
             try {
